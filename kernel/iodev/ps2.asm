@@ -46,6 +46,10 @@ mouse_old_data			dd 0
 mouse_old_x			dd 0
 mouse_old_y			dd 0
 
+; these contain the initial x/y pos at the moment the button was pressed
+mouse_initial_x			dd 0
+mouse_initial_y			dd 0
+
 mouse_x_max			dd 0
 mouse_y_max			dd 0
 
@@ -291,7 +295,7 @@ ps2_mouse_init:
 	; set resolution
 	mov al, PS2_MOUSE_SET_RESOLUTION
 	call ps2_mouse_send
-	mov al, 3
+	mov al, 0
 	call ps2_mouse_send
 
 	; set packets per second
@@ -444,6 +448,10 @@ ps2_mouse_irq:
 ; Updates the mouse position
 
 update_mouse:
+	; if the mouse data doesn't have proper alignment, ignore the packet
+	test [mouse_packet.data], 8
+	jz .quit
+
 	; if the overflow bits are set, ignore the packet
 	test [mouse_packet.data], MOUSE_X_OVERFLOW OR MOUSE_Y_OVERFLOW
 	jnz .quit
@@ -452,7 +460,7 @@ update_mouse:
 	mov eax, [mouse_data]
 	mov [mouse_old_data], eax
 
-	movzx eax, [mouse_packet.data]
+	mov al, [mouse_packet.data]
 	mov [mouse_data], eax
 
 	mov eax, [mouse_x]

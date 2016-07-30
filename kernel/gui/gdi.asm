@@ -114,8 +114,8 @@ get_pixel_offset:
 	add esi, VBE_PHYSICAL_BUFFER
 	add edi, VBE_BACK_BUFFER
 
-	cmp [current_buffer], 1
-	je .swap
+	test [current_buffer], 1
+	jnz .swap
 	ret
 
 .swap:
@@ -570,7 +570,7 @@ print_string_transparent:
 	push esi
 	mov cx, [.x]
 	mov dx, [.y]
-	mov esi, [system_font]
+	mov esi, font
 	call render_char_transparent
 	pop esi
 

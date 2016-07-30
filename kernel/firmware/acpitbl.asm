@@ -12,10 +12,6 @@ use32
 
 ACPI_SDT_SIZE		= 36	; size of acpi sdt header
 
-; ACPI Control Block Fields
-ACPI_CONTROL_ENABLED	= 0x0001
-ACPI_CONTROL_SLEEP	= 0x2000
-
 ; ACPI Event Data
 ACPI_EVENT_TIMER		= 1
 ACPI_EVENT_BUSMASTER		= 0x10
@@ -25,6 +21,8 @@ ACPI_EVENT_SLEEPBUTTON		= 0x200
 ACPI_EVENT_RTC			= 0x400
 ACPI_EVENT_PCIE_WAKE		= 0x4000
 ACPI_EVENT_WAKE			= 0x8000
+
+acpi_support			db 0
 
 macro acpi_gas
 {
@@ -108,10 +106,14 @@ acpi_init:
 	shr eax, 4		; div 4
 	mov [acpi_tables], eax	; # of ACPI tables
 
+	mov [acpi_support], 1
+
 	call enable_acpi	; Enable ACPI
 	ret
 
 .no:
+	mov [acpi_rsdt], 0
+	mov [acpi_tables], 0
 	mov esi, .no_msg
 	call kprint
 
@@ -127,6 +129,9 @@ acpi_init:
 ; Out\	EAX = Pointer to table, -1 on error
 
 acpi_find_table:
+	cmp [acpi_support], 0
+	je .no
+
 	mov [.sig], eax
 	mov [.current_table], 0
 

@@ -86,11 +86,11 @@ ata_detect:
 	jle .secondary_standard
 	and ax, 0xFFFC
 	mov [ata_secondary], ax
-	jmp .detect_drives
+	jmp .detect_devices
 
 .secondary_standard:
 	mov [ata_secondary], ATA_SECONDARY_BASE
-	jmp .detect_drives
+	jmp .detect_devices
 
 .isa:
 	; to detect ISA ATA, use the "floating bus" technique
@@ -103,7 +103,7 @@ ata_detect:
 	mov [ata_primary], ATA_PRIMARY_BASE
 	mov [ata_secondary], ATA_SECONDARY_BASE
 
-.detect_drives:
+.detect_devices:
 	mov esi, .ports_msg
 	call kprint
 	mov ax, [ata_primary]
@@ -132,7 +132,31 @@ ata_detect:
 	out dx, al
 
 	; detect the devices
+	mov dl, 0			; primary channel/master dev
+	call ata_identify
+	mov dl, 1			; primary channel/slave dev
+	call ata_identify
+	mov dl, 2			; secondary channel/master dev
+	call ata_identify
+	mov dl, 3			; secondary channel/slave dev
+	call ata_identify
 
+	; setup the ATA IRQ stuff
+	mov al, 14+IRQ_BASE
+	mov ebp, ata_irq
+	call install_isr
+
+	mov al, 15+IRQ_BASE
+	mov ebp, ata_irq
+	call install_isr
+
+	mov al, 14
+	call pic_unmask
+	mov al, 15
+	call pic_unmask
+
+	; reset, also enables IRQs
+	call ata_reset
 	ret
 
 .no_ata:
@@ -184,11 +208,250 @@ ata_reset:
 ; ata_identify:
 ; Identifies an ATA device
 ; In\	DL = Bit 0 -> set for slave device; bit 1 -> set for secondary controller
-; In\	EDI = Buffer to save information
 ; Out\	EFLAGS.CF = 0 on success
 
 ata_identify:
-	test dl, 2	; secondary controller?
+	push edx
 
+	; reset the ATA channels
+	call ata_reset
+
+	; disable ATA IRQs
+	mov dx, [ata_primary]
+	add dx, 0x206
+	mov al, 2
+	out dx, al
+
+	mov dx, [ata_secondary]
+	add dx, 0x206
+	mov al, 2
+	out dx, al
+
+	pop edx
+
+	mov [.drive_backup], dl
+	mov [.drive], dl
+	test dl, 2	; secondary controller?
+	jnz .secondary
+
+.primary:
+	mov dx, [ata_primary]
+	mov [.io], dx
+
+	mov esi, .primary_msg
+	call kprint
+
+	jmp .check_device
+
+.secondary:
+	mov dx, [ata_secondary]
+	mov [.io], dx
+	mov esi, .secondary_msg
+	call kprint
+
+.check_device:
+	test [.drive], 1	; slave device?
+	jnz .slave
+
+.master:
+	mov esi, .master_msg
+	call kprint
+
+	mov [.drive], 0xA0
+	jmp .start
+
+.slave:
+	mov esi, .slave_msg
+	call kprint
+
+	mov [.drive], 0xB0	; with slave bit set
+
+.start:
+	mov dx, [.io]
+	add dx, 6		; drive select
+	mov al, [.drive]
+	out dx, al
+	call iowait
+
+	mov dx, [.io]
+	add dx, 2		; 0x1F2
+	mov al, 0
+	out dx, al
+	inc dx			; 0x1F3
+	out dx, al
+	inc dx			; 0x1F4
+	out dx, al
+	inc dx			; 0x1F5
+	out dx, al
+
+	inc dx
+	inc dx			; 0x1F7
+	mov al, ATA_IDENTIFY
+	out dx, al
+	call iowait
+
+	in al, dx
+	cmp al, 0
+	je .no_device
+	cmp al, 0xFF
+	je .no_device
+
+.wait_for_bsy:
+	in al, dx
+	test al, 0x80
+	jnz .wait_for_bsy
+
+	test al, 1
+	jnz .no_device
+	test al, 0x20
+	jnz .no_device
+
+.check_ata:
+	mov dx, [.io]
+	add dx, 4
+	in al, dx
+	cmp al, 0
+	jne .no_device
+
+	inc dx
+	in al, dx
+	cmp al, 0
+	jne .no_device
+
+.wait_for_drq:
+	mov dx, [.io]
+	add dx, 7
+	in al, dx
+	test al, 8		; DRQ?
+	jnz .read
+
+	test al, 1		; ERR?
+	jnz .no_device
+
+	test al, 0x20		; DF?
+	jnz .no_device
+
+	jmp .wait_for_drq
+
+.read:
+	mov dx, [.io]
+	mov ecx, 256
+	mov edi, ata_identify_data
+	rep insw
+
+	mov esi, .quote
+	call kprint
+	mov esi, ata_identify_data.model
+	call swap_string_order
+	call trim_string
+	call kprint
+	mov esi, .quote
+	call kprint
+	mov esi, newline
+	call kprint
+
+	; register the device
+	mov al, BLKDEV_ATA
+	mov ah, BLKDEV_PARTITIONED
+	movzx edx, [.drive_backup]
+	call blkdev_register
+
+	clc
+	ret
+
+.no_device:
+	mov esi, .no_msg
+	call kprint
+
+	stc
+	ret
+
+.drive			db 0
+.drive_backup		db 0
+.io			dw 0
+.buffer			dd 0
+.primary_msg		db "ATA primary channel ",0
+.secondary_msg		db "ATA secondary channel ",0
+.master_msg		db "master device is ",0
+.slave_msg		db "slave device is ",0
+.quote			db "'",0
+.no_msg			db "not present.",10,0
+
+; ata_irq:
+; ATA IRQ Handler
+
+ata_irq:
+	push eax
+
+	; first check if it's a spurious irq
+	; because irq 15 is shared with ATA secondary channel and PIC2 spurious
+	mov al, 0x0B
+	out 0xA0, al
+	call iowait
+	in al, 0xA0
+
+	test al, 0x80
+	jz .spurious
+
+	mov [.happened], 1	; tell the driver that an irq happened
+
+	mov al, 0x20
+	out 0xA0, al
+	out 0x20, al
+	pop eax
+	iret
+
+.spurious:
+	mov al, 0x20
+	out 0x20, al
+	pop eax
+	iret
+
+.happened		db 0
+
+; ata_identify_data:
+; Data returned from the ATA/ATAPI IDENTIFY command
+align 16
+ata_identify_data:
+	.device_type		dw 0		; 0
+
+	.cylinders		dw 0		; 1
+	.reserved_word2		dw 0		; 2
+	.heads			dw 0		; 3
+				dd 0		; 4
+	.sectors_per_track	dw 0		; 6
+	.vendor_unique:		times 3 dw 0	; 7
+	.serial_number:		times 20 db 0	; 10
+				dd 0		; 11
+	.obsolete1		dw 0		; 13
+	.firmware_revision:	times 8 db 0	; 14
+	.model:			times 40 db 0	; 18
+	.maximum_block_transfer	db 0
+				db 0
+				dw 0
+
+				db 0
+	.dma_support		db 0
+	.lba_support		db 0
+	.iordy_disable		db 0
+	.iordy_support		db 0
+				db 0
+	.standyby_timer_support	db 0
+				db 0
+				dw 0
+
+				dd 0
+	.translation_fields	dw 0
+				dw 0
+	.current_cylinders	dw 0
+	.current_heads		dw 0
+	.current_spt		dw 0
+	.current_sectors	dd 0
+				db 0
+				db 0
+				db 0
+	.user_addressable_secs	dd 0
+				dw 0
+	times 512 - ($-ata_identify_data) db 0
 
 

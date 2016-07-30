@@ -12,7 +12,8 @@ hex_values:		db "0123456789ABCDEF"
 ; Out\	EAX = String size
 
 strlen:
-	pusha
+	push esi
+
 	xor ecx, ecx
 
 .loop:
@@ -20,15 +21,12 @@ strlen:
 	cmp al, 0
 	je .done
 	inc ecx
-	loop .loop
+	jmp .loop
 
 .done:
-	mov [.tmp], ecx
-	popa
-	mov eax, [.tmp]
+	mov eax, ecx
+	pop esi
 	ret
-
-.tmp			dd 0
 
 ; hex_nibble_to_string:
 ; Converts a hex nibble to string
@@ -207,4 +205,87 @@ int_to_string:
 
 .string:		times 11 db 0
 .counter		db 0
+
+; trim_string:
+; Trims a string from forward and backward spaces
+; In\	ESI = String
+; Out\	ESI = Modified string
+
+trim_string:
+	push esi
+
+.trim_spaces:
+	mov ax, [esi]
+
+	cmp ax, 0x2020
+	je .remove_space
+
+	cmp al, 0
+	je .removed_all_spaces
+
+	add esi, 2
+	jmp .trim_spaces
+
+.remove_space:
+	mov word[esi], 0x0000
+	add esi, 2
+	jmp .trim_spaces
+
+.removed_all_spaces:
+	pop esi
+
+.search_for_start:
+	cmp byte[esi], 0x00
+	je .forward
+
+	mov [.string], esi
+
+	mov esi, [.string]
+	call strlen
+	add esi, eax
+	dec esi
+	cmp byte[esi], 0x20
+	je .remove_last_space
+
+	mov esi, [.string]
+	ret
+
+.forward:
+	inc esi
+	jmp .search_for_start
+
+.remove_last_space:
+	mov byte[esi], 0x00
+	mov esi, [.string]
+	ret
+
+.string				dd 0
+
+; swap_string_order:
+; Swaps the byte-order of a string (needed for ATA really.. stupid)
+; In\	ESI = String
+; Out\	String modified
+
+swap_string_order:
+	pusha
+
+.loop:
+	mov ax, [esi]
+
+	cmp al, 0
+	je .done
+	cmp ah, 0
+	je .done
+
+	xchg al, ah
+	mov [esi], ax
+	add esi, 2
+	jmp .loop
+
+.done:
+	popa
+	ret
+
+
+
 

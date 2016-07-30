@@ -76,8 +76,6 @@ wm_read_mouse:
 ; Out\	Nothing
 
 wm_clear:
-	pusha
-
 	cli
 	mov [.color], ebx
 
@@ -96,7 +94,6 @@ wm_clear:
 
 .done:
 	call wm_redraw
-	popa
 	ret
 
 .color			dd 0
@@ -195,7 +192,6 @@ wm_render_char:
 ; Out\	Nothing
 
 wm_draw_text:
-	pusha
 	cli
 
 	mov [.handle], eax
@@ -203,7 +199,7 @@ wm_draw_text:
 	mov [.y], dx
 	mov [.ox], cx
 	mov [.oy], dx
-	mov [.color], edx
+	mov [.color], ebx
 
 .loop:
 	lodsb
@@ -239,7 +235,6 @@ wm_draw_text:
 
 .done:
 	call wm_redraw
-	popa
 	ret
 
 .handle			dd 0

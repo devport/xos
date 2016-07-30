@@ -210,12 +210,57 @@ idle_process:
 
 task1:
 	mov ebp, 0
-	mov ax, 64
-	mov bx, 64
+	mov ax, 48
+	mov bx, 48
 	mov si, 360
 	mov di, 256
 	mov dx, 0
 	mov ecx, .title
+	int 0x60
+
+	mov ebp, 7
+	mov eax, 0
+	mov cx, 16
+	mov dx, 16
+	mov esi, .text
+	mov ebx, 0x000000
+	int 0x60
+
+	mov ebp, 7
+	mov eax, 0
+	mov cx, 16
+	mov dx, 32
+	mov esi, .total
+	mov ebx, 0
+	int 0x60
+
+	mov eax, [idle_time]
+	add eax, [nonidle_time]
+	call int_to_string
+
+	mov ebp, 7
+	mov eax, 0
+	mov cx, 16+(.total_len * 8)
+	mov dx, 32
+	mov ebx, 0
+	int 0x60
+
+	mov ebp, 7
+	mov eax, 0
+	mov cx, 16
+	mov dx, 48
+	mov esi, .nonidle
+	mov ebx, 0
+	int 0x60
+
+	mov eax, [nonidle_time]
+	call int_to_string
+
+	mov ebp, 7
+	mov eax, 0
+	mov cx, 16+(.nonidle_len * 8)
+	mov dx, 48
+	mov ebx, 0
 	int 0x60
 
 .wait:
@@ -294,7 +339,7 @@ task1:
 
 task2:
 	mov ebp, 0
-	mov ax, 320
+	mov ax, 430
 	mov bx, 200
 	mov si, 256
 	mov di, 256
@@ -302,49 +347,27 @@ task2:
 	mov ecx, .title
 	int 0x60
 
-.wait:
-	; read window event
-	mov ebp, 4
-	mov eax, 1
-	int 0x60
-
-	test ax, WM_LEFT_CLICK
-	jnz .clicked
-
-	mov ebp, 1
-	int 0x60
-	jmp .wait
-
-.clicked:
-	inc [.clicks]
-
-	mov ebp, 8
-	mov eax, 1
-	mov ebx, 0xD8D8D8
-	int 0x60
-
 	mov ebp, 7
 	mov eax, 1
-	mov cx, 16
-	mov dx, 16
 	mov esi, .text
-	mov ebx, 0x000000
-	int 0x60
-
-	mov eax, [.clicks]
-	call int_to_string
-
-	mov ebp, 7
-	mov eax, 1
-	mov cx, 16
-	mov dx, 32
+	mov cx, 8
+	mov dx, 16
 	mov ebx, 0
 	int 0x60
 
-	jmp .wait
+.hang:
+	mov ebp, 1
+	int 0x60
+	jmp .hang
 
 .title			db "Test Window",0
-.text			db "Total click events received: ",0
+.text			db "Thanks for trying xOS!",10
+			db "There's not much to see now..",10
+			db "But if you want to see an ACPI",10
+			db "shutdown, click OFF on the top",10
+			db "left corner.",10
+			db "Please send me your feedback: ",10
+			db " omarx024@gmail.com.",0
 .text_len		= $ - .text - 1
 .clicks			dd 0
 
@@ -390,6 +413,7 @@ task2:
 
 	; Graphics
 	include "kernel/gui/gdi.asm"		; Graphics library
+	include "kernel/gui/desktop.asm"	; Desktop
 	include "kernel/gui/wm.asm"		; Window manager
 	include "kernel/gui/canvas.asm"		; Window canvas functions
 

@@ -448,9 +448,7 @@ wm_redraw:
 	call use_back_buffer
 	call lock_screen
 
-	; start with the background
-	mov ebx, [wm_color]
-	call clear_screen
+	call desktop_redraw
 
 	; now move on to the windows
 	xor eax, eax
@@ -614,8 +612,8 @@ wm_event:
 	test [wm_running], 1
 	jz .no_wm
 
-	test [mouse_data], MOUSE_LEFT_BTN	; left click event
-	jz .done
+	;test [mouse_data], MOUSE_LEFT_BTN	; left click event
+	;jz .done
 
 	; now we know the user has his finger on the left button
 	; is he clicking or dragging?
@@ -645,7 +643,7 @@ wm_event:
 	mov dx, [eax+WINDOW_Y]
 	add dx, 24
 	cmp cx, dx
-	jl .done
+	jl .check_taskbar
 
 	or word[eax+WINDOW_EVENT], WM_LEFT_CLICK
 
@@ -655,9 +653,18 @@ wm_event:
 	call wm_detect_window
 	mov [active_window], eax
 	cmp eax, -1
-	je .done
+	je .check_taskbar
 	jmp .click
 	;jmp .done
+
+.check_taskbar:
+	cmp [mouse_y], 32
+	jl .desktop_event
+	jmp .done
+
+.desktop_event:
+	call desktop_event
+	jmp .done
 
 .drag:
 	; if the user dragged something --
@@ -753,6 +760,9 @@ wm_event:
 ; Out\	AX = Bitfield of WM event data; I'll document this somewhere
 
 wm_read_event:
+	cmp eax, MAXIMUM_WINDOWS
+	jge .no
+
 	shl eax, 7
 	add eax, [window_handles]
 	test word[eax], WM_PRESENT	; is the window present?
@@ -769,5 +779,47 @@ wm_read_event:
 	xor ax, ax
 	ret
 
+; wm_kill:
+; Kills a window
+; In\	EAX = Window handle
+; Out\	Nothing
+
+wm_kill:
+	shl eax, 7
+	add eax, [window_handles]
+	test word[eax], WM_PRESENT
+	jz .no
+
+	mov edi, eax
+	mov eax, 0
+	mov ecx, WINDOW_HANDLE_SIZE
+	rep stosb
+
+	dec [open_windows]
+
+.no:
+	call wm_redraw
+	ret
+
+; wm_kill_all:
+; Kills all windows
+
+wm_kill_all:
+	mov [.handle], 0
+
+.loop:
+	cmp [.handle], MAXIMUM_WINDOWS
+	jge .done
+
+	mov eax, [.handle]
+	call wm_kill
+
+	inc [.handle]
+	jmp .loop
+
+.done:
+	ret
+
+.handle		dd 0
 
 
