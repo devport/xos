@@ -394,9 +394,7 @@ render_char_transparent32:
 	cmp [.row], 16
 	je .done
 
-	mov eax, [screen.bytes_per_pixel]
-	shl eax, 3
-	sub edi, eax
+	sub edi, 8*4
 	add edi, [screen.bytes_per_line]
 
 	mov esi, [.font_data]
@@ -460,9 +458,7 @@ render_char_transparent24:
 	cmp [.row], 16
 	je .done
 
-	mov eax, [screen.bytes_per_pixel]
-	shl eax, 3
-	sub edi, eax
+	sub edi, 8*3
 	add edi, [screen.bytes_per_line]
 
 	mov esi, [.font_data]

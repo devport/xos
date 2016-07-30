@@ -13,7 +13,7 @@ use32
 ; u16 x;			// 0x08
 ; u16 y;			// 0x0A
 ; u32 framebuffer;		// 0x0C
-; u32 controls;			// 0x10
+; u32 reserved;			// 0x10
 ; u32 pid;			// 0x14
 ; u16 max_x;			// 0x18
 ; u16 max_y;			// 0x1A
@@ -46,10 +46,6 @@ WM_HIDDEN			= 0x0002
 WM_ALPHA			= 0x0004
 WM_THIN_BORDER			= 0x0008
 WM_NO_BORDER			= 0x0010
-WM_DISABLED			= 0x0020
-WM_UNMOVABLE			= 0x0040
-WM_NO_TASKBAR			= 0x0080
-WM_HAS_CONTROLS			= 0x0100
 
 ; Window Events
 WM_LEFT_CLICK			= 0x0001
@@ -658,7 +654,10 @@ wm_event:
 .set_focus:
 	call wm_detect_window
 	mov [active_window], eax
-	jmp .done
+	cmp eax, -1
+	je .done
+	jmp .click
+	;jmp .done
 
 .drag:
 	; if the user dragged something --

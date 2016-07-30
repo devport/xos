@@ -171,6 +171,11 @@ kmain32:
 	finit
 	fwait
 
+	; enable PMC in userspace
+	mov eax, cr4
+	or eax, 0x100
+	mov cr4, eax
+
 	; names of functions say enough of what they do ;)
 	call com1_detect
 	call install_exceptions
@@ -207,7 +212,7 @@ task1:
 	mov ebp, 0
 	mov ax, 64
 	mov bx, 64
-	mov si, 256
+	mov si, 360
 	mov di, 256
 	mov dx, 0
 	mov ecx, .title
@@ -227,8 +232,6 @@ task1:
 	jmp .wait
 
 .clicked:
-	inc [.clicks]
-
 	mov ebp, 8
 	mov eax, 0
 	mov ebx, 0xD8D8D8
@@ -242,27 +245,57 @@ task1:
 	mov ebx, 0x000000
 	int 0x60
 
-	mov eax, [.clicks]
-	call int_to_string
-
 	mov ebp, 7
 	mov eax, 0
 	mov cx, 16
 	mov dx, 32
+	mov esi, .total
+	mov ebx, 0
+	int 0x60
+
+	mov eax, [idle_time]
+	add eax, [nonidle_time]
+	call int_to_string
+
+	mov ebp, 7
+	mov eax, 0
+	mov cx, 16+(.total_len * 8)
+	mov dx, 32
+	mov ebx, 0
+	int 0x60
+
+	mov ebp, 7
+	mov eax, 0
+	mov cx, 16
+	mov dx, 48
+	mov esi, .nonidle
+	mov ebx, 0
+	int 0x60
+
+	mov eax, [nonidle_time]
+	call int_to_string
+
+	mov ebp, 7
+	mov eax, 0
+	mov cx, 16+(.nonidle_len * 8)
+	mov dx, 48
 	mov ebx, 0
 	int 0x60
 
 	jmp .wait
 
-.title			db "Test Window #1",0
-.text			db "Total click events received: ",0
-.text_len		= $ - .text - 1
+.title			db "CPU Usage",0
+.text			db "Click this window to refresh CPU usage. ",0
+.total			db "Total time: ",0
+.total_len		= $ - .total - 1
+.nonidle		db "Non-idle time: ",0
+.nonidle_len		= $ - .nonidle - 1
 .clicks			dd 0
 
 task2:
 	mov ebp, 0
-	mov ax, 128
-	mov bx, 128
+	mov ax, 320
+	mov bx, 200
 	mov si, 256
 	mov di, 256
 	mov dx, 0
@@ -310,7 +343,7 @@ task2:
 
 	jmp .wait
 
-.title			db "Test Window #2",0
+.title			db "Test Window",0
 .text			db "Total click events received: ",0
 .text_len		= $ - .text - 1
 .clicks			dd 0

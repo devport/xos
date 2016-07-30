@@ -32,8 +32,12 @@ TASK_RESERVED1		= 0x18
 TASK_RESERVED2		= 0x1C
 TASK_SIZE		= 0x20
 
+; Each Task Gets 1/10 Second Execution Time
+TASK_TIMESLICE		= TIMER_FREQUENCY/10
+
 ; Task State Flags
 TASK_PRESENT		= 0x0001
+TASK_WAITING		= 0x0002
 
 ; Stack Frame for IRET
 IRET_EIP		= 0x0000
@@ -53,6 +57,8 @@ MAXIMUM_TASKS		= 32	; probably expand this in the future?
 running_tasks		dw 0
 current_task		dw 0
 task_structure		dd 0
+idle_time		dd 0
+nonidle_time		dd 0
 
 ; tasking_init:
 ; Initializes the multitasking subsystem

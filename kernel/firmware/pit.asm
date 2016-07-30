@@ -51,6 +51,17 @@ pit_irq:
 
 	inc [timer_ticks]
 
+	cmp [current_task], 0
+	je .idle
+
+.non_idle:
+	inc [nonidle_time]
+	jmp .done
+
+.idle:
+	inc [idle_time]
+
+.done:
 	mov al, 0x20
 	out 0x20, al
 
