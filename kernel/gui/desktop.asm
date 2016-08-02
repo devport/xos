@@ -87,6 +87,9 @@ main_menu_handler:
 	mov ecx, .title
 	call wm_create_window
 
+	cmp eax, -1
+	je .just_shutdown
+
 	; display "It's now safe to power off your PC." in case the shutdown fails
 	mov esi, .msg
 	mov cx, 24
@@ -94,6 +97,7 @@ main_menu_handler:
 	mov ebx, 0x000000
 	call wm_draw_text
 
+.just_shutdown:
 	; enter ACPI sleep state S5
 	mov esp, stack16+2048
 	mov al, 5

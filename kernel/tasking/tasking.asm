@@ -74,7 +74,7 @@ tasking_init:
 	; mark the first task (PID 0) as present
 	; this prevents user applications from taking PID 0
 	; PID 0 really is the Idle task, which just Halts the CPU in an infinite loop
-	mov word[task_structure], TASK_PRESENT
+	mov word[eax], TASK_PRESENT
 	mov [running_tasks], 1
 	mov [current_task], 0
 

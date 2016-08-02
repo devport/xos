@@ -64,7 +64,7 @@ wm_running			db 0
 ; Window Theme!
 ; TO-DO: Set these values from a theme file from the disk (i.e. make the gui costomizable)
 align 16
-wm_color			dd 0x0062A8
+wm_color			dd 0x303030
 ;window_header			dd 0xE8A200
 window_header			dd 0x00A2E8
 window_inactive_header		dd 0x222222
@@ -785,12 +785,19 @@ wm_read_event:
 ; Out\	Nothing
 
 wm_kill:
+	cli
+	mov [active_window], -1
+
 	shl eax, 7
 	add eax, [window_handles]
 	test word[eax], WM_PRESENT
 	jz .no
 
-	mov edi, eax
+	push eax
+	mov eax, [eax+WINDOW_FRAMEBUFFER]
+	call free		; free the framebuffer memory
+
+	pop edi
 	mov eax, 0
 	mov ecx, WINDOW_HANDLE_SIZE
 	rep stosb
