@@ -409,6 +409,197 @@ ata_irq:
 
 .happened		db 0
 
+; ata_read:
+; Reads from an ATA device
+; In\	EDX:EAX = LBA sector
+; In\	ECX = Sector count
+; In\	BL = Drive bitfield (bit 0 for slave device, bit 1 for secondary channel)
+; In\	EDI = Buffer to read sectors
+; Out\	AL = 0 on success, 1 on error
+; Out\	AH = Drive status register
+
+ata_read:
+	; To save performance, only use LBA48 if it's nescessary
+	; There's no reason to use almost twice the IO bandwidth when we can avoid it
+	;cmp edx, 0
+	;jne ata_read_lba48
+	;cmp eax, 0xFFFFFFF-256
+	;jge ata_read_lba48
+
+	jmp ata_read_lba28
+
+; ata_read_lba28:
+; Reads from an ATA device using LBA28
+
+ata_read_lba28:
+	mov [.drive], bl
+	mov [.count], ecx
+	mov [.buffer], edi
+	mov [.lba], eax
+	mov [.current_count], 0
+
+	cmp [.count], 0
+	je .error
+
+	test [.drive], 2		; secondary/primary channel?
+	jnz .secondary
+
+	mov dx, [ata_primary]
+	mov [.io], dx
+	jmp .check_device
+
+.secondary:
+	mov dx, [ata_secondary]
+	mov [.io], dx
+
+.check_device:
+	test [.drive], 1		; primary/slave device?
+	jnz .slave
+
+	mov [.device], 0xE0
+	jmp .start
+
+.slave:
+	mov [.device], 0xF0
+
+.start:
+	; first we need to send the highest 4 bits of the lba to the drive select port
+	mov eax, [.lba]
+	shr eax, 24		; keep only highest bits
+	or al, [.device]
+	mov dx, [.io]
+	add dx, 6		; drive select port
+	out dx, al
+	call iowait
+
+	; sector count
+	mov dx, [.io]
+	add dx, 2		; 0x1F2
+	mov eax, [.count]
+	out dx, al
+
+	; LBA
+	inc dx			; 0x1F3
+	mov eax, [.lba]
+	out dx, al
+	inc dx			; 0x1F4
+	shr eax, 8
+	out dx, al
+	inc dx			; 0x1F5
+	shr eax, 8
+	out dx, al
+	inc dx
+	inc dx			; 0x1F7
+
+	mov al, ATA_READ_LBA28
+	out dx, al
+	call iowait
+
+	in al, dx
+	cmp al, 0
+	je .error
+	cmp al, 0xFF
+	je .error
+
+.wait_for_bsy:
+	in al, dx
+	test al, 0x80
+	jnz .wait_for_bsy
+
+.wait_for_drq:
+	in al, dx
+	test al, 8		; drq?
+	jnz .read_sector
+	test al, 1		; err?
+	jnz .error
+	test al, 0x20		; df?
+	jnz .error
+	jmp .wait_for_drq
+
+.read_sector:
+	; read a single sector
+	mov edi, [.buffer]
+	mov dx, [.io]
+	mov ecx, 256
+	rep insw
+	mov [.buffer], edi
+
+	; give the drive time to refresh its buffers and status
+	call iowait
+	call iowait
+
+	inc [.current_count]
+	mov ecx, [.count]
+	cmp [.current_count], ecx
+	jge .done
+
+	mov dx, [.io]
+	add dx, 7
+	jmp .wait_for_drq
+
+.error:
+	mov esi, .err_msg
+	call kprint
+	movzx eax, [.drive]
+	call int_to_string
+	call kprint
+	mov esi, .err_msg2
+	call kprint
+	mov al, ATA_READ_LBA28
+	call hex_byte_to_string
+	call kprint
+	mov esi, .err_msg3
+	call kprint
+	mov eax, [.lba]
+	call hex_dword_to_string
+	call kprint
+	mov esi, .err_msg4
+	call kprint
+	mov eax, [.count]
+	call hex_byte_to_string
+	call kprint
+	mov esi, .err_msg5
+	call kprint
+	mov dx, [.io]
+	add dx, 7
+	in al, dx
+	call hex_byte_to_string
+	call kprint
+	mov esi, newline
+	call kprint
+
+	mov dx, [.io]
+	add dx, 7		; status
+	in al, dx
+	mov ah, al
+	mov al, 1
+
+	push eax
+	call ata_reset
+	pop eax
+	ret
+
+.done:
+	mov dx, [.io]
+	add dx, 7
+	in al, dx
+	mov ah, al
+	mov al, 0
+	ret
+
+.io			dw 0
+.drive			db 0
+.device			db 0
+.count			dd 0
+.current_count		dd 0
+.buffer			dd 0
+.lba			dd 0
+.err_msg		db "Error in ATA device ",0
+.err_msg2		db ", command 0x",0
+.err_msg3		db ", LBA 0x",0
+.err_msg4		db ", count 0x",0
+.err_msg5		db ", status 0x",0
+
 ; ata_identify_data:
 ; Data returned from the ATA/ATAPI IDENTIFY command
 align 16
