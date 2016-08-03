@@ -35,6 +35,8 @@ kmalloc:
 	mov ecx, [.pages]
 	mov dl, KMALLOC_FLAGS
 	call vmm_alloc
+	cmp eax, 0
+	je .no
 	mov [.return], eax
 
 	mov edi, [.return]
@@ -60,7 +62,7 @@ kmalloc:
 kfree:
 	mov ecx, [eax-16]
 	sub ecx, 16
-	call vmm_unmap_memory
+	call vmm_free
 	ret
 
 ; malloc:
@@ -78,6 +80,8 @@ malloc:
 	mov ecx, [.pages]
 	mov dl, MALLOC_FLAGS
 	call vmm_alloc
+	cmp eax, 0
+	je .no
 	mov [.return], eax
 
 	mov edi, [.return]
@@ -103,7 +107,7 @@ malloc:
 free:
 	mov ecx, [eax-16]
 	sub ecx, 16
-	call vmm_unmap_memory
+	call vmm_free
 	ret
 
 
